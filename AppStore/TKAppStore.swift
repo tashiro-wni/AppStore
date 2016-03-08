@@ -184,7 +184,7 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
 
         purchaseReceiptCount = 0
         restoredReceiptCount = 0
-        self.delegate?.purchaseStarted?("Restoreing...")
+        self.delegate?.purchaseStarted("Restoreing...")
         SKPaymentQueue.defaultQueue().restoreCompletedTransactions()
     }
     
@@ -270,7 +270,7 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
     // MARK: - SKPaymentTransactionObserver
     func paymentQueue(queue: SKPaymentQueue, updatedTransactions transactions: [SKPaymentTransaction]) {
         LOG("\(__FUNCTION__), recieve \(transactions.count) transactions.")
-        self.delegate?.purchaseStarted?("Purchasing...")
+        self.delegate?.purchaseStarted("Purchasing...")
         
         for transaction in transactions {
             //LOG("transactionID: \(transaction.transactionIdentifier), \(transaction.transactionDate)")
