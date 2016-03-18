@@ -12,11 +12,8 @@
 //  4. appStoreReceiptURL の参照先ファイルが存在しない場合、SKReceiptRefreshRequest() で更新を要求
 //  5. サーバーとの通信を NSURLConnection (iOS 9 でdeplicated) の代わりに NSURLSession を用いて行うよう変更
 
-// TODO: 自動更新でレシートが飛んできた場合、インジケーターが表示されずにバックグラウンドで通信して、いきなり完了のダイアログが表示されることがある。
-// TODO: アプリインストール直後、ログインしているAppleIDのレシートが .Purchased でまとめて飛んでくることがある。(.Restoreではない)この時もインジケーターは表示されない。
+// TODO: アプリインストール直後、ログインしているAppleIDのレシートが .Purchased でまとめて飛んでくることがある。(.Restoreではない)
 // TODO: 購入完了時、サーバー送信前にStoreKitが「購入ありがとうございました」のダイアログを出すので、その後もサーバー検証完了までインジケーターが表示され続けるのは違和感があるかも。
-
-// TODO: 購入前、サーバー負荷確認の処理を追加する
 
 
 import Foundation
@@ -95,15 +92,16 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
     }
     
     // HTTP POST用
-    private let api_url = "http://apns01.wni.co.jp/tingkeling/api_receipt_submit.cgi"
+    private let api_reserve_url = "http://apns01.wni.co.jp/tingkeling/api_purchase_reserve.cgi"
+    private let api_submit_url  = "http://apns01.wni.co.jp/tingkeling/api_receipt_submit.cgi"
     private let boundary = "ZWFofh45lqDFMYVm" + (CFUUIDCreateString(kCFAllocatorDefault, CFUUIDCreate(kCFAllocatorSystemDefault)) as String)
     
-    // MARK: - class lifecycle
-    static let sharedInstance = TKAppStore()
     var delegate :TKAppStoreDelegate?
     var purchaseReceiptCount = 0
     var restoredReceiptCount = 0
+    private var purchasingProduct :SKProduct?
     private var receiptRetriving = false
+    private var serverSending = false
     private let defaultsKey_validDate = "validDate"
     var validDate :NSDate? {
         get {
@@ -122,10 +120,14 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
             NSUserDefaults.standardUserDefaults().synchronize()
         }
     }
+    var transactionId :String?
     
     // TODO: akey は profileManager を参照するよう変更予定
     private var akey = UIDevice.currentDevice().identifierForVendor!.UUIDString  // DEBUG時は id4vendorで代用
     
+    // MARK: - class lifecycle
+    static let sharedInstance = TKAppStore()
+
     override init() {
         super.init()
         
@@ -177,14 +179,67 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         if product == nil {
             self.purchaseFinished(false, message: Message.ProductInfoMissing.rawValue)
             return
+        } else {
+            self.purchasingProduct = product
         }
- 
+
+        
+        // create HTTP request 購入事前確認
+        var fields = [String:String]()
+        fields["akey"] = self.akey
+        //        fields["akey"]      = profileManager.akey
+        //        fields["devtoken"]  = profileManager.devtoken
+        //        fields["id4vendor"] = profileManager.id4vendor
+        //        fields["app_ver"]   = profileManager.app_version
+        //        fields["ios_ver"]   = profileManager.ios_version
+        fields["device"]    = DeviceInfo.deviceName()
+        fields["network"]   = DeviceInfo.carrierName()
+        fields["product_id"]   = self.purchasingProduct!.productIdentifier
+        
+        let formData = NSData(multiPartFormDataFields: fields, files: nil, boundary: self.boundary)
+
+        LOG("API sending... \(self.api_reserve_url)")
+        let request = NSMutableURLRequest(URL: NSURL(string: self.api_reserve_url)!)
+        request.HTTPMethod = "POST"
+        request.setValue("multipart/form-data; boundary=" + self.boundary, forHTTPHeaderField: "Content-Type")
+        request.HTTPBody = formData
+        
+        // HTTP 非同期通信
+        NSURLSession.sharedSession().dataTaskWithRequest(request, completionHandler: didReceiveReserveResponse).resume()
+    }
+    
+    func didReceiveReserveResponse(data: NSData?, response :NSURLResponse?, error :NSError?) {
+        let http_response = response as! NSHTTPURLResponse
+        let str = NSString(data:data!, encoding:NSUTF8StringEncoding)
+        LOG("HTTP response \(http_response.statusCode), \(str)")
+        
+        if http_response.statusCode != 200 {
+            self.purchaseFinished(false, message: Message.ServerBusy.rawValue)
+            return
+        }
+        
+        do {  // parse json
+            let json = try NSJSONSerialization.JSONObjectWithData(data!, options: .MutableContainers) as! NSDictionary
+            if json["status"] as! String != "OK" {
+                LOG("reserve api auth NG.")
+                // TODO: reserve NG のエラーメッセージはもう少し場合分けする。akeyなしとか product_id 無効とか
+                self.purchaseFinished(false, message: Message.ServerBusy.rawValue)
+                return
+            }
+        } catch {
+            // json parse error
+            LOG("json parse failed.")
+            self.purchaseFinished(false, message: Message.ServerBusy.rawValue)
+            return
+        }
+        
+        // reserve OK
         purchaseReceiptCount = 0
         restoredReceiptCount = 0
-        let payment = SKMutablePayment(product: product!)
+        let payment = SKMutablePayment(product: self.purchasingProduct!)
         payment.applicationUsername = self.akey  // iOS7以降、購入時に"誰が"購入したか、Username をレシートに含めることができるようになった? => サーバーに送信されるレシートにはこの情報は含まれないらしい
         
-        LOG("purchase start: \(product!.productIdentifier) <=====")
+        LOG("purchase start: \(self.purchasingProduct!.productIdentifier) <=====")
         SKPaymentQueue.defaultQueue().addPayment(payment)
     }
     
@@ -208,6 +263,7 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         
         purchaseReceiptCount = 0
         restoredReceiptCount = 0
+        purchasingProduct = nil
         self.delegate?.purchaseFinished(result, message: message)
     }
 
@@ -336,51 +392,6 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         }
     }
     
-    func verifyReceipt() {
-        if let receipt = self.appStoreReceipt() {
-            if self.sendServer(receipt) {
-                // サーバー送信完了
-                LOG("\(__FUNCTION__), api send OK")
-                if purchaseReceiptCount > 0 {
-                    // 購入時は、サーバーにレシート送信が完了してから finishTransaction()する
-                    for transaction in SKPaymentQueue.defaultQueue().transactions {
-                        if transaction.transactionState == .Purchased {
-                            SKPaymentQueue.defaultQueue().finishTransaction(transaction)
-                        }
-                    }
-                    self.purchaseFinished(true, message: Message.PurchaseFinished.rawValue)
-                } else if self.validDate?.timeIntervalSinceNow > 0 {
-                    // リストア、有効期限内
-                    self.purchaseFinished(true, message: Message.RestoreFinished.rawValue)
-                } else if self.validDate != nil {
-                    // リストア、有効期限切れ
-                    self.purchaseFinished(true, message: Message.RestoreExpired.rawValue)
-                } else {
-                    // リストア、履歴なし
-                    self.purchaseFinished(true, message: Message.RestoreNotFound.rawValue)
-                }
-                return
-            }
-            else {
-                // サーバー送信失敗
-                LOG("\(__FUNCTION__), api send NG !!!")
-            }
-        } else {
-            // レシートが取得できない場合
-            LOG("\(__FUNCTION__), no receipt !!!!!")
-        }
-        
-        if receiptRetriving == false {
-            if purchaseReceiptCount > 0 {
-                self.purchaseFinished(false, message: Message.PurchaseFailed.rawValue)
-            } else if restoredReceiptCount > 0 {
-                self.purchaseFinished(false, message: Message.RestoreFailed.rawValue)
-            } else {
-                self.purchaseFinished(false, message: Message.RestoreNotFound.rawValue)
-            }
-        }
-    }
-
     func paymentQueue(queue: SKPaymentQueue, removedTransactions transactions: [SKPaymentTransaction]) {
 /*
         for transaction in transactions {
@@ -391,7 +402,9 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
     
     func paymentQueueRestoreCompletedTransactionsFinished(queue: SKPaymentQueue) {
         LOG(__FUNCTION__)
-        self.purchaseFinished(true, message: nil)
+        if self.serverSending == false {
+            self.purchaseFinished(true, message: nil)
+        }
     }
 
     func paymentQueue(queue: SKPaymentQueue, restoreCompletedTransactionsFailedWithError error: NSError) {
@@ -432,7 +445,28 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         }
     }
     
-    private func sendServer(receipt :String) -> Bool {
+    private func verifyReceipt() {
+        if let receipt = self.appStoreReceipt() {
+            // サーバーにレシート送信
+            self.sendServer(receipt)
+            return
+        }
+        
+        // レシートが取得できない場合
+        LOG("\(__FUNCTION__), no receipt !!!!!")
+        
+        if receiptRetriving == false {
+            if purchaseReceiptCount > 0 {
+                self.purchaseFinished(false, message: Message.PurchaseFailed.rawValue)
+            } else if restoredReceiptCount > 0 {
+                self.purchaseFinished(false, message: Message.RestoreFailed.rawValue)
+            } else {
+                self.purchaseFinished(false, message: Message.RestoreNotFound.rawValue)
+            }
+        }
+    }
+
+    private func sendServer(receipt :String) {
         //LOG(__FUNCTION__)
         self.delegate?.purchaseStarted(Message.ServerSending.rawValue)
         
@@ -456,63 +490,77 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         //LOG("formData:\(NSString(data:formData, encoding:NSUTF8StringEncoding))")
         
         // create HTTP request
-        LOG("API sending... \(self.api_url)")
-        let request = NSMutableURLRequest(URL: NSURL(string: self.api_url)!)
+        LOG("API sending... \(self.api_submit_url)")
+        let request = NSMutableURLRequest(URL: NSURL(string: self.api_submit_url)!)
         request.HTTPMethod = "POST"
         request.setValue("multipart/form-data; boundary=" + self.boundary, forHTTPHeaderField: "Content-Type")
         request.HTTPBody = formData
         
-        var result :Bool = false
-        // HTTP 同期通信
-        sendSynchronize(request, completion:{ data, response, error in
-            let http_response = response as! NSHTTPURLResponse
-            let str = NSString(data:data!, encoding:NSUTF8StringEncoding)
-            LOG("HTTP response \(http_response.statusCode), \(str)")
-            
-            if http_response.statusCode != 200 {
-                result = false
+        // HTTP 非同期通信
+        self.serverSending = true
+        NSURLSession.sharedSession().dataTaskWithRequest(request, completionHandler: didReceiveSubmitResponse).resume()
+    }
+    
+    func didReceiveSubmitResponse(data: NSData?, response :NSURLResponse?, error :NSError?) {
+        self.serverSending = false
+        let http_response = response as! NSHTTPURLResponse
+        let str = NSString(data:data!, encoding:NSUTF8StringEncoding)
+        LOG("HTTP response \(http_response.statusCode), \(str)")
+        
+        if http_response.statusCode != 200 {
+            self.purchaseFinished(false, message: Message.ServerBusy.rawValue)
+            return
+        }
+        
+        do {  // parse json
+            let json = try NSJSONSerialization.JSONObjectWithData(data!, options: .MutableContainers) as! NSDictionary
+            if json["status"]!["auth"] as! String != "OK" {
+                LOG("api auth NG.")
+                self.purchaseFinished(false, message: Message.ServerBusy.rawValue)
                 return
             }
             
-            do {  // parse json
-                let json = try NSJSONSerialization.JSONObjectWithData(data!, options: .MutableContainers) as! NSDictionary
-                if json["status"]!["auth"] as! String != "OK" {
-                    LOG("api auth NG.")
-                    result = false
-                    return
-                }
-                
-                // api reponse OK
-                let tid = json["status"]!["tid"] as! String
-                let valid_tm = json["status"]!["valid_tm"] as! Double
-                if valid_tm > 0 {
-                    self.validDate = NSDate(timeIntervalSince1970: valid_tm)
-                    LOG("api auth OK, TID:\(tid), valid_tm:\(valid_tm), expireDate:\(self.validDate!)")
-                    result = true
-                } else {
-                    self.validDate = nil
-                    LOG("api auth OK, TID:\(tid), valid_tm:\(valid_tm), expireDate:unknown")
-                    result = false
-                }
-                
-            } catch {
-                // json parse error
-                LOG("json parse failed.")
-                result = false
+            // api reponse OK
+            let tid = json["status"]!["tid"] as! String
+            if tid.lengthOfBytesUsingEncoding(NSUTF8StringEncoding) > 0 {
+                self.transactionId = tid
             }
-        })
-        return result
-    }
-    
-    // NSURLSession を用いた同期通信
-    private func sendSynchronize(request :NSURLRequest, completion: (NSData?, NSURLResponse?, NSError?) -> Void) {
-        let semaphore = dispatch_semaphore_create(0)
-        let subtask = NSURLSession.sharedSession().dataTaskWithRequest(request, completionHandler: { data, response, error in
-            completion(data, response, error)
-            dispatch_semaphore_signal(semaphore)
-        })
-        subtask.resume()
-        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER)
+            
+            let valid_tm = json["status"]!["valid_tm"] as! Double
+            if valid_tm > 0 {
+                self.validDate = NSDate(timeIntervalSince1970: valid_tm)
+                LOG("api auth OK, TID:\(tid), valid_tm:\(valid_tm), expireDate:\(self.validDate!)")
+                
+                if purchaseReceiptCount > 0 {
+                    // 購入時は、サーバーにレシート送信が完了してから finishTransaction()する
+                    for transaction in SKPaymentQueue.defaultQueue().transactions {
+                        if transaction.transactionState == .Purchased {
+                            SKPaymentQueue.defaultQueue().finishTransaction(transaction)
+                        }
+                    }
+                    self.purchaseFinished(true, message: Message.PurchaseFinished.rawValue)
+
+                } else if self.validDate?.timeIntervalSinceNow > 0 {
+                    // リストア、有効期限内
+                    self.purchaseFinished(true, message: Message.RestoreFinished.rawValue)
+
+                } else {
+                    // リストア、有効期限切れ
+                    self.purchaseFinished(true, message: Message.RestoreExpired.rawValue)
+                }
+                
+            } else {
+                // リストア、履歴なし
+                self.validDate = nil
+                LOG("api auth OK, TID:\(tid), valid_tm:\(valid_tm), expireDate:unknown")
+                self.purchaseFinished(false, message: Message.RestoreNotFound.rawValue)
+            }
+            
+        } catch {
+            // json parse error
+            LOG("json parse failed.")
+            self.purchaseFinished(false, message: Message.ServerBusy.rawValue)
+       }
     }
     
 }

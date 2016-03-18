@@ -15,7 +15,6 @@ class ViewController: UIViewController, TKAppStoreDelegate, UITableViewDataSourc
     private let cellIdentifier = "defaultCell"
     private let dateFormatter = NSDateFormatter()
     private var hud :MBProgressHUD? = nil
-    //private var modal :WNModalLoadingWindowController? = nil
     
     private enum Section :Int {
         case Purchase
@@ -43,7 +42,6 @@ class ViewController: UIViewController, TKAppStoreDelegate, UITableViewDataSourc
         infoTable.delegate = self
         infoTable.tableFooterView = UIView(frame: CGRectZero)
         infoTable.registerClass(UITableViewCell.self, forCellReuseIdentifier: cellIdentifier)
-        infoTable.allowsSelection = false
 
         TKAppStore.sharedInstance.delegate = self
     }
@@ -63,72 +61,31 @@ class ViewController: UIViewController, TKAppStoreDelegate, UITableViewDataSourc
     func productInfoUpdated() {
         LOG(__FUNCTION__)
         infoTable.reloadData()
-        infoTable.allowsSelection = true
     }
     
     func purchaseStarted(message :String?) {
-        LOG("\(__FUNCTION__), \(message)")
-        self.performSelectorOnMainThread("showLoadingDialog:", withObject: message, waitUntilDone: false)
-        //self.showLoadingDialog(message)
-    }
-    
-    func showLoadingDialog(message :String?) {
-        LOG("\(__FUNCTION__), \(message)")
-        if hud == nil {
-            hud = MBProgressHUD.init(view: self.view)
-            hud!.dimBackground = true
-            self.view.addSubview(hud!)
-        }
-        if let msg = message {
-            hud!.labelText = msg
-        }
-        hud!.show(true)
-
-        UIApplication.sharedApplication().networkActivityIndicatorVisible = true
-        self.view.setNeedsDisplay()
+        //LOG("\(__FUNCTION__), \(message)")
+        self.performSelectorOnMainThread("showLoadingDialog:", withObject: message, waitUntilDone: true)
     }
     
     func purchaseFinished(result :Bool, message :String?) {
         //LOG(__FUNCTION__ + ", \(message)")
-        self.showAlert(message)
-        infoTable.allowsSelection = true
-        hud?.hide(true)
-//        modal?.hide()
-
-        UIApplication.sharedApplication().networkActivityIndicatorVisible = false
-        self.updateValidDate()
+        self.performSelectorOnMainThread("hideLoadingDialog:", withObject: message, waitUntilDone: true)
     }
-    
+
     func updateValidDate() {
         if let date = TKAppStore.sharedInstance.validDate {
             infoLabel.text = "有効期限: " + dateFormatter.stringFromDate(date)
             infoLabel.textColor = date.timeIntervalSinceNow < 0 ? UIColor.redColor(): UIColor.blackColor()
+            
+            if let tid = TKAppStore.sharedInstance.transactionId {
+                infoLabel.text = infoLabel.text! + "\ntid: \(tid)"
+            }
+            
         } else {
             infoLabel.text = "有効期限: ---"
         }
     }
-    
-    // MARK: - WNModalLoadingWindowController
-/*
-    func showModal(message :String?) {
-        if modal == nil {
-            modal = WNModalLoadingWindowController.init()
-        }
-        modal!.delegate = self
-        if let msg = message {
-            modal!.showWithTitle(msg, showButton: false)
-        } else {
-            modal!.showWithTitle("", showButton: false)
-        }
-    }
-
-    override func modalLoadingWindowControllerDidClickButton(view :WNModalLoadingWindowController) {        
-    }
-    
-    override func modalLoadingWindowControllerDidHide(view :WNModalLoadingWindowController) {
-        modal = nil
-    }
-*/
     
     // MARK: - UITableViewDataSource
     func numberOfSectionsInTableView(tableView: UITableView) -> Int {
@@ -178,18 +135,15 @@ class ViewController: UIViewController, TKAppStoreDelegate, UITableViewDataSourc
     
     // MARK: - UITableViewDelegate
     func tableView(tableView: UITableView, didSelectRowAtIndexPath indexPath: NSIndexPath) {
-        //self.view.window?.makeKeyAndVisible()
         tableView.deselectRowAtIndexPath(indexPath, animated: true)
 
         switch indexPath.section {
         case Section.Purchase.rawValue:
             let productType = TKAppStore.ProductType.allValues[indexPath.row]
             TKAppStore.sharedInstance.purchaseStart(productType)
-            tableView.allowsSelection = false
 
         case Section.Restore.rawValue:
             TKAppStore.sharedInstance.restoreStart()
-            tableView.allowsSelection = false
 
         default:
             break
@@ -197,6 +151,28 @@ class ViewController: UIViewController, TKAppStoreDelegate, UITableViewDataSourc
     }
     
     // MARK: - private function
+    func showLoadingDialog(message :String?) {
+        LOG(String(format: "%@, \"%@\"", __FUNCTION__, (message != nil) ? message! : ""))
+        if hud == nil {
+            hud = MBProgressHUD.init(view: self.view)
+            hud!.dimBackground = true
+            self.view.addSubview(hud!)
+        }
+        if let msg = message {
+            hud!.labelText = msg
+        }
+        hud!.show(true)
+        
+        self.view.setNeedsDisplay()
+    }
+    
+    func hideLoadingDialog(message :String?) {
+        hud?.hide(true)
+        self.showAlert(message)
+        
+        self.updateValidDate()
+    }
+
     func showAlert(message :String?) {
         if message == nil {
             return
