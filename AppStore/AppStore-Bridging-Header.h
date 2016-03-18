@@ -6,3 +6,4 @@
 #import "NSData+multiPartFormData.h"
 #import "DeviceInfo.h"
 #import "MBProgressHUD.h"
+#import "WNModalLoadingWindowController.h"

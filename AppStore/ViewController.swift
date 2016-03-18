@@ -15,6 +15,7 @@ class ViewController: UIViewController, TKAppStoreDelegate, UITableViewDataSourc
     private let cellIdentifier = "defaultCell"
     private let dateFormatter = NSDateFormatter()
     private var hud :MBProgressHUD? = nil
+    //private var modal :WNModalLoadingWindowController? = nil
     
     private enum Section :Int {
         case Purchase
@@ -47,6 +48,11 @@ class ViewController: UIViewController, TKAppStoreDelegate, UITableViewDataSourc
         TKAppStore.sharedInstance.delegate = self
     }
 
+    override func viewDidAppear(animated: Bool) {
+        LOG(__FUNCTION__)
+        super.viewDidAppear(animated)
+    }
+    
     override func didReceiveMemoryWarning() {
         LOG(__FUNCTION__)
         super.didReceiveMemoryWarning()
@@ -62,21 +68,34 @@ class ViewController: UIViewController, TKAppStoreDelegate, UITableViewDataSourc
     
     func purchaseStarted(message :String?) {
         LOG("\(__FUNCTION__), \(message)")
-        hud?.hide(false)
-        hud = MBProgressHUD.showHUDAddedTo(self.view, animated: true)
+        self.performSelectorOnMainThread("showLoadingDialog:", withObject: message, waitUntilDone: false)
+        //self.showLoadingDialog(message)
+    }
+    
+    func showLoadingDialog(message :String?) {
+        LOG("\(__FUNCTION__), \(message)")
+        if hud == nil {
+            hud = MBProgressHUD.init(view: self.view)
+            hud!.dimBackground = true
+            self.view.addSubview(hud!)
+        }
         if let msg = message {
             hud!.labelText = msg
         }
-        //UIApplication.sharedApplication().networkActivityIndicatorVisible = true
+        hud!.show(true)
+
+        UIApplication.sharedApplication().networkActivityIndicatorVisible = true
+        self.view.setNeedsDisplay()
     }
     
     func purchaseFinished(result :Bool, message :String?) {
-        LOG(__FUNCTION__ + ", \(message)")
+        //LOG(__FUNCTION__ + ", \(message)")
         self.showAlert(message)
         infoTable.allowsSelection = true
         hud?.hide(true)
+//        modal?.hide()
 
-        //UIApplication.sharedApplication().networkActivityIndicatorVisible = false
+        UIApplication.sharedApplication().networkActivityIndicatorVisible = false
         self.updateValidDate()
     }
     
@@ -88,6 +107,28 @@ class ViewController: UIViewController, TKAppStoreDelegate, UITableViewDataSourc
             infoLabel.text = "有効期限: ---"
         }
     }
+    
+    // MARK: - WNModalLoadingWindowController
+/*
+    func showModal(message :String?) {
+        if modal == nil {
+            modal = WNModalLoadingWindowController.init()
+        }
+        modal!.delegate = self
+        if let msg = message {
+            modal!.showWithTitle(msg, showButton: false)
+        } else {
+            modal!.showWithTitle("", showButton: false)
+        }
+    }
+
+    override func modalLoadingWindowControllerDidClickButton(view :WNModalLoadingWindowController) {        
+    }
+    
+    override func modalLoadingWindowControllerDidHide(view :WNModalLoadingWindowController) {
+        modal = nil
+    }
+*/
     
     // MARK: - UITableViewDataSource
     func numberOfSectionsInTableView(tableView: UITableView) -> Int {
@@ -137,6 +178,7 @@ class ViewController: UIViewController, TKAppStoreDelegate, UITableViewDataSourc
     
     // MARK: - UITableViewDelegate
     func tableView(tableView: UITableView, didSelectRowAtIndexPath indexPath: NSIndexPath) {
+        //self.view.window?.makeKeyAndVisible()
         tableView.deselectRowAtIndexPath(indexPath, animated: true)
 
         switch indexPath.section {

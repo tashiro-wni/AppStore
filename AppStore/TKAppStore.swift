@@ -12,6 +12,13 @@
 //  4. appStoreReceiptURL の参照先ファイルが存在しない場合、SKReceiptRefreshRequest() で更新を要求
 //  5. サーバーとの通信を NSURLConnection (iOS 9 でdeplicated) の代わりに NSURLSession を用いて行うよう変更
 
+// TODO: 自動更新でレシートが飛んできた場合、インジケーターが表示されずにバックグラウンドで通信して、いきなり完了のダイアログが表示されることがある。
+// TODO: アプリインストール直後、ログインしているAppleIDのレシートが .Purchased でまとめて飛んでくることがある。(.Restoreではない)この時もインジケーターは表示されない。
+// TODO: 購入完了時、サーバー送信前にStoreKitが「購入ありがとうございました」のダイアログを出すので、その後もサーバー検証完了までインジケーターが表示され続けるのは違和感があるかも。
+
+// TODO: 購入前、サーバー負荷確認の処理を追加する
+
+
 import Foundation
 import StoreKit
 
@@ -70,6 +77,9 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         case ServerBusy                 = "現在購入ができません。\nしばらくたってからお試しください。"
 //        case OtherChargeType            = "他の課金方法で課金中のため、\n追加の購入は行えません。"
 //        case AutoRenewalValid           = "現在購読中のため\n追加の購入は行えません。"
+        case Purchasing                 = "Purchasing..."
+        case Restoreing                 = "Restoreing..."
+        case ServerSending              = "DB updating..."
         case PurchaseFinished           = "有効期限を更新しました。"
         case PurchaseFailed             = "購入が失敗しました。"
         case PurchaseDeferred           = "保護者の承認待ちです。"
@@ -93,10 +103,11 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
     var delegate :TKAppStoreDelegate?
     var purchaseReceiptCount = 0
     var restoredReceiptCount = 0
-    private var akey = UIDevice.currentDevice().identifierForVendor!.UUIDString  // DEBUG時は id4vendorで代用
+    private var receiptRetriving = false
+    private let defaultsKey_validDate = "validDate"
     var validDate :NSDate? {
         get {
-            if let date = NSUserDefaults.standardUserDefaults().objectForKey("validDate") {
+            if let date = NSUserDefaults.standardUserDefaults().objectForKey(defaultsKey_validDate) {
                 return date as? NSDate
             } else {
                 return nil
@@ -104,13 +115,16 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         }
         set {
             if newValue != nil {
-                NSUserDefaults.standardUserDefaults().setObject(newValue, forKey: "validDate")
+                NSUserDefaults.standardUserDefaults().setObject(newValue, forKey: defaultsKey_validDate)
             } else {
-                NSUserDefaults.standardUserDefaults().removeObjectForKey("validDate")
+                NSUserDefaults.standardUserDefaults().removeObjectForKey(defaultsKey_validDate)
             }
             NSUserDefaults.standardUserDefaults().synchronize()
         }
     }
+    
+    // TODO: akey は profileManager を参照するよう変更予定
+    private var akey = UIDevice.currentDevice().identifierForVendor!.UUIDString  // DEBUG時は id4vendorで代用
     
     override init() {
         super.init()
@@ -184,7 +198,7 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
 
         purchaseReceiptCount = 0
         restoredReceiptCount = 0
-        self.delegate?.purchaseStarted("Restoreing...")
+        self.delegate?.purchaseStarted(Message.Restoreing.rawValue)
         SKPaymentQueue.defaultQueue().restoreCompletedTransactions()
     }
     
@@ -231,6 +245,7 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         // レシート更新要求の他、ProductInfo取得時もここが呼び出される
         if request.isKindOfClass(SKReceiptRefreshRequest) {
             LOG("\(__FUNCTION__), \(request)")
+            self.receiptRetriving = false
 
             if let receiptUrl = NSBundle.mainBundle().appStoreReceiptURL {
                 if let path = receiptUrl.path {
@@ -270,7 +285,12 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
     // MARK: - SKPaymentTransactionObserver
     func paymentQueue(queue: SKPaymentQueue, updatedTransactions transactions: [SKPaymentTransaction]) {
         LOG("\(__FUNCTION__), recieve \(transactions.count) transactions.")
-        self.delegate?.purchaseStarted("Purchasing...")
+        if self.delegate != nil {
+            self.delegate?.purchaseStarted(Message.Purchasing.rawValue)
+        } else {
+            LOG("TKAppStore.delegate:nil")
+        }
+        
         
         for transaction in transactions {
             //LOG("transactionID: \(transaction.transactionIdentifier), \(transaction.transactionDate)")
@@ -350,12 +370,14 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
             LOG("\(__FUNCTION__), no receipt !!!!!")
         }
         
-        if purchaseReceiptCount > 0 {
-            self.purchaseFinished(false, message: Message.PurchaseFailed.rawValue)
-        } else if restoredReceiptCount > 0 {
-            self.purchaseFinished(false, message: Message.RestoreFailed.rawValue)
-        } else {
-            self.purchaseFinished(false, message: Message.RestoreNotFound.rawValue)
+        if receiptRetriving == false {
+            if purchaseReceiptCount > 0 {
+                self.purchaseFinished(false, message: Message.PurchaseFailed.rawValue)
+            } else if restoredReceiptCount > 0 {
+                self.purchaseFinished(false, message: Message.RestoreFailed.rawValue)
+            } else {
+                self.purchaseFinished(false, message: Message.RestoreNotFound.rawValue)
+            }
         }
     }
 
@@ -385,6 +407,7 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
             if let path = receiptUrl.path {
                 if NSFileManager.defaultManager().fileExistsAtPath(path) == false {
                     LOG("レシートが存在しないので要求")
+                    self.receiptRetriving = true
                     let req = SKReceiptRefreshRequest()
                     req.delegate = self
                     req.start()
@@ -411,7 +434,8 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
     
     private func sendServer(receipt :String) -> Bool {
         //LOG(__FUNCTION__)
-
+        self.delegate?.purchaseStarted(Message.ServerSending.rawValue)
+        
         // create form data
 //        let profileManager = TKProfileManager.sharedManager()
         var fields = [String:String]()

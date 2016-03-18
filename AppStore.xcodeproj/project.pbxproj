@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		71EA5AB2B6C83E47F50888A4 /* libPods.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A2B3F52041A9588A252535EC /* libPods.a */; };
+		F952F2461C9AA0F300360A80 /* WNModalLoadingWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = F952F2421C9AA0F300360A80 /* WNModalLoadingWindowController.m */; };
+		F952F2471C9AA0F300360A80 /* WNModalLoadingWindowController.xib in Resources */ = {isa = PBXBuildFile; fileRef = F952F2431C9AA0F300360A80 /* WNModalLoadingWindowController.xib */; };
+		F952F2481C9AA0F300360A80 /* WNRoundedRectView.m in Sources */ = {isa = PBXBuildFile; fileRef = F952F2451C9AA0F300360A80 /* WNRoundedRectView.m */; };
 		F96018B81C857A6E00D33072 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F96018B71C857A6E00D33072 /* AppDelegate.swift */; };
 		F96018BA1C857A6E00D33072 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F96018B91C857A6E00D33072 /* ViewController.swift */; };
 		F96018BD1C857A6E00D33072 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = F96018BB1C857A6E00D33072 /* Main.storyboard */; };
@@ -24,6 +27,11 @@
 		41A0B8D119260EE0101BAB08 /* Pods.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = Pods.debug.xcconfig; path = "Pods/Target Support Files/Pods/Pods.debug.xcconfig"; sourceTree = "<group>"; };
 		5091BF06A9F591227580C53D /* Pods.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = Pods.release.xcconfig; path = "Pods/Target Support Files/Pods/Pods.release.xcconfig"; sourceTree = "<group>"; };
 		A2B3F52041A9588A252535EC /* libPods.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libPods.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		F952F2411C9AA0F300360A80 /* WNModalLoadingWindowController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WNModalLoadingWindowController.h; sourceTree = "<group>"; };
+		F952F2421C9AA0F300360A80 /* WNModalLoadingWindowController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = WNModalLoadingWindowController.m; sourceTree = "<group>"; };
+		F952F2431C9AA0F300360A80 /* WNModalLoadingWindowController.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = WNModalLoadingWindowController.xib; sourceTree = "<group>"; };
+		F952F2441C9AA0F300360A80 /* WNRoundedRectView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WNRoundedRectView.h; sourceTree = "<group>"; };
+		F952F2451C9AA0F300360A80 /* WNRoundedRectView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = WNRoundedRectView.m; sourceTree = "<group>"; };
 		F96018B41C857A6E00D33072 /* AppStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AppStore.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F96018B71C857A6E00D33072 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		F96018B91C857A6E00D33072 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
@@ -102,6 +110,11 @@
 				F96018D01C857B2100D33072 /* WNHTTPLoader.m */,
 				F96018D41C857BE800D33072 /* DeviceInfo.h */,
 				F96018D51C857BE800D33072 /* DeviceInfo.m */,
+				F952F2411C9AA0F300360A80 /* WNModalLoadingWindowController.h */,
+				F952F2421C9AA0F300360A80 /* WNModalLoadingWindowController.m */,
+				F952F2431C9AA0F300360A80 /* WNModalLoadingWindowController.xib */,
+				F952F2441C9AA0F300360A80 /* WNRoundedRectView.h */,
+				F952F2451C9AA0F300360A80 /* WNRoundedRectView.m */,
 				F96018BB1C857A6E00D33072 /* Main.storyboard */,
 				F96018BE1C857A6E00D33072 /* Assets.xcassets */,
 				F96018C01C857A6E00D33072 /* LaunchScreen.storyboard */,
@@ -175,6 +188,7 @@
 				F96018C21C857A6E00D33072 /* LaunchScreen.storyboard in Resources */,
 				F96018BF1C857A6E00D33072 /* Assets.xcassets in Resources */,
 				F96018BD1C857A6E00D33072 /* Main.storyboard in Resources */,
+				F952F2471C9AA0F300360A80 /* WNModalLoadingWindowController.xib in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -239,6 +253,8 @@
 				F96018D11C857B2100D33072 /* DebugLog.all.swift in Sources */,
 				F96018CA1C857AB800D33072 /* TKAppStore.swift in Sources */,
 				F96018B81C857A6E00D33072 /* AppDelegate.swift in Sources */,
+				F952F2481C9AA0F300360A80 /* WNRoundedRectView.m in Sources */,
+				F952F2461C9AA0F300360A80 /* WNModalLoadingWindowController.m in Sources */,
 				F96018D21C857B2100D33072 /* NSData+multiPartFormData.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
