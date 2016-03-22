@@ -14,6 +14,7 @@
 
 // TODO: アプリインストール直後、ログインしているAppleIDのレシートが .Purchased でまとめて飛んでくることがある。(.Restoreではない)
 // TODO: 購入完了時、サーバー送信前にStoreKitが「購入ありがとうございました」のダイアログを出すので、その後もサーバー検証完了までインジケーターが表示され続けるのは違和感があるかも。
+// TODO: 新規購入時、StoreKit のダイアログがなかなか表示されないことがある(iOS7)
 
 
 import Foundation
@@ -37,13 +38,21 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
     enum ProductType :String {
         // アプリで利用する product_id、将来複数になった場合でも対応できるように。
         //case Monthly = "co.xingtuan.i.tingkeling.monthly"
-        case Monthly   = "com.weathernews.l10s.monthly"
-        case Annual    = "com.weathernews.l10s.annual"
-        case Ticket365 = "com.weathernews.l10s.365d"
+        //case Monthly   = "com.weathernews.l10s.monthly"
+        //case Annual    = "com.weathernews.l10s.annual"
+        //case Ticket365 = "com.weathernews.l10s.365d"
+        case Monthly   = "com.weathernews.rakuraku.monthly_250"
+        case Ticket31  = "com.weathernews.rakuraku.31d"
+        case Ticket90  = "com.weathernews.rakuraku.90d"
+        case Ticket180 = "com.weathernews.rakuraku.180d"
+        case Ticket365 = "com.weathernews.rakuraku.365d_1"
         
-        static let allValues = [ Monthly, Annual, Ticket365 ]
+        //static let allValues = [ Monthly, Annual, Ticket365 ]  // l10s
+        static let allValues = [ Monthly, Ticket31, Ticket90, Ticket180, Ticket365 ]  // rakuraku
+
         static let count = allValues.count
-        static let productIdSets = Set<String>(arrayLiteral: Monthly.rawValue, Annual.rawValue, Ticket365.rawValue )
+        //static let productIdSets = Set<String>(arrayLiteral: Monthly.rawValue, Annual.rawValue, Ticket365.rawValue )  // l10s
+        static let productIdSets = Set<String>(arrayLiteral: Monthly.rawValue, Ticket31.rawValue, Ticket90.rawValue, Ticket180.rawValue, Ticket365.rawValue )  // rakuraku
         
         func title() -> String? {
             if let product = TKAppStore.sharedInstance.productDictionary[self.rawValue] {
@@ -92,8 +101,10 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
     }
     
     // HTTP POST用
-    private let api_reserve_url = "http://apns01.wni.co.jp/tingkeling/api_purchase_reserve.cgi"
-    private let api_submit_url  = "http://apns01.wni.co.jp/tingkeling/api_receipt_submit.cgi"
+    //private let api_reserve_url = "http://apns01.wni.co.jp/tingkeling/api_purchase_reserve.cgi"
+    private let api_reserve_url = "http://apns01.wni.co.jp/rkrk/api_purchase_reserve.cgi"
+    //private let api_submit_url  = "http://apns01.wni.co.jp/tingkeling/api_receipt_submit.cgi"
+    private let api_submit_url  = "http://apns01.wni.co.jp/rkrk/api_receipt_submit.cgi"
     private let boundary = "ZWFofh45lqDFMYVm" + (CFUUIDCreateString(kCFAllocatorDefault, CFUUIDCreate(kCFAllocatorSystemDefault)) as String)
     
     var delegate :TKAppStoreDelegate?

@@ -351,9 +351,9 @@
 				INFOPLIST_FILE = AppStore/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				"OTHER_SWIFT_FLAGS[arch=*]" = "-D DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.weathernews.l10s;
+				PRODUCT_BUNDLE_IDENTIFIER = com.weathernews.rakuraku;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE = "434e00db-133e-485a-9b83-4f7d98178b54";
+				PROVISIONING_PROFILE = "c055ac5b-279f-456b-b33e-15f30d3cc00e";
 				SWIFT_OBJC_BRIDGING_HEADER = "AppStore/AppStore-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -367,9 +367,9 @@
 				CLANG_ENABLE_MODULES = YES;
 				INFOPLIST_FILE = AppStore/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.weathernews.l10s;
+				PRODUCT_BUNDLE_IDENTIFIER = com.weathernews.rakuraku;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE = "434e00db-133e-485a-9b83-4f7d98178b54";
+				PROVISIONING_PROFILE = "c055ac5b-279f-456b-b33e-15f30d3cc00e";
 				SWIFT_OBJC_BRIDGING_HEADER = "AppStore/AppStore-Bridging-Header.h";
 			};
 			name = Release;
