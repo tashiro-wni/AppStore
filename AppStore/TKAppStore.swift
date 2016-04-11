@@ -14,7 +14,6 @@
 
 // TODO: アプリインストール直後、ログインしているAppleIDのレシートが .Purchased でまとめて飛んでくることがある。(.Restoreではない)
 // TODO: 購入完了時、サーバー送信前にStoreKitが「購入ありがとうございました」のダイアログを出すので、その後もサーバー検証完了までインジケーターが表示され続けるのは違和感があるかも。
-// TODO: 新規購入時、StoreKit のダイアログがなかなか表示されないことがある(iOS7)
 
 
 import Foundation
@@ -67,6 +66,7 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
                 numberFormatter.formatterBehavior = .Behavior10_4
                 numberFormatter.numberStyle = .CurrencyStyle
                 numberFormatter.locale = product.priceLocale
+                numberFormatter.positiveFormat = "#,##0円"
                 return numberFormatter.stringFromNumber(product.price)!
             }
             return nil
@@ -146,8 +146,8 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         self.productInfoRefresh()
 
         // アプリが裏に回った場合、その間は SKPaymentQueue.defaultQueue() の transactionObserver を無効にする
-        NSNotificationCenter.defaultCenter().addObserver(self, selector: "applicationDidBecomeActive",  name: UIApplicationDidBecomeActiveNotification,  object: nil)
-        NSNotificationCenter.defaultCenter().addObserver(self, selector: "applicationWillResignActive", name: UIApplicationWillResignActiveNotification, object: nil)
+        NSNotificationCenter.defaultCenter().addObserver(self, selector: "applicationWillEnterForeground", name: UIApplicationWillEnterForegroundNotification, object: nil)
+        NSNotificationCenter.defaultCenter().addObserver(self, selector: "applicationDidEnterBackground",  name: UIApplicationDidEnterBackgroundNotification,  object: nil)
         SKPaymentQueue.defaultQueue().addTransactionObserver(self)
     }
     
@@ -157,13 +157,13 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         SKPaymentQueue.defaultQueue().removeTransactionObserver(self)
     }
 
-    func applicationDidBecomeActive() {
+    func applicationWillEnterForeground() {
         //LOG(__FUNCTION__)
         SKPaymentQueue.defaultQueue().addTransactionObserver(self)
         self.productInfoRefresh()
     }
     
-    func applicationWillResignActive() {
+    func applicationDidEnterBackground() {
         //LOG(__FUNCTION__)
         SKPaymentQueue.defaultQueue().removeTransactionObserver(self)
     }
@@ -265,6 +265,8 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         purchaseReceiptCount = 0
         restoredReceiptCount = 0
         self.delegate?.purchaseStarted(Message.Restoreing.rawValue)
+        //self.performSelectorOnMainThread("showModal:", withObject: Message.Restoreing.rawValue, waitUntilDone: false)
+
         SKPaymentQueue.defaultQueue().restoreCompletedTransactions()
     }
     
@@ -275,6 +277,8 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         purchaseReceiptCount = 0
         restoredReceiptCount = 0
         purchasingProduct = nil
+
+       // self.performSelectorOnMainThread("hideModal", withObject: nil, waitUntilDone: false)
         self.delegate?.purchaseFinished(result, message: message)
     }
 
@@ -379,7 +383,10 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
             case .Failed:  // 購入失敗
                 LOG("Purchase NG, \(transaction.payment.productIdentifier), \(transaction.transactionIdentifier!), \(transaction.error!.code), \(transaction.error!.localizedDescription)")
                 queue.finishTransaction(transaction)
-                if transaction.error?.code == SKErrorPaymentCancelled {
+                
+                if transaction.error?.code == SKErrorPaymentCancelled  // for Xcode 7.2.x
+                //if transaction.error?.code == SKErrorCode.PaymentCancelled.rawValue  // for XCode 7.3
+                {
                     // キャンセルの場合はダイアログを表示しない
                     LOG("purchase cancelled.")
                     self.purchaseFinished(false, message: nil)
@@ -414,7 +421,13 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
     func paymentQueueRestoreCompletedTransactionsFinished(queue: SKPaymentQueue) {
         LOG(__FUNCTION__)
         if self.serverSending == false {
-            self.purchaseFinished(true, message: nil)
+            if restoredReceiptCount == 0 {
+                // 購入履歴なしの場合、paymentQueue(queue:, updatedTransactions:) は呼ばれずにいきなりここが呼ばれる。
+                self.purchaseFinished(true, message: Message.RestoreNotFound.rawValue)
+                return
+            } else {
+                self.purchaseFinished(true, message: nil)
+            }
         }
     }
 
@@ -501,7 +514,7 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         //LOG("formData:\(NSString(data:formData, encoding:NSUTF8StringEncoding))")
         
         // create HTTP request
-        LOG("API sending... \(self.api_submit_url)")
+        LOG("receipt submit API sending... \(self.api_submit_url)")
         let request = NSMutableURLRequest(URL: NSURL(string: self.api_submit_url)!)
         request.HTTPMethod = "POST"
         request.setValue("multipart/form-data; boundary=" + self.boundary, forHTTPHeaderField: "Content-Type")
