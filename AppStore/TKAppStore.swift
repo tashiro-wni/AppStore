@@ -81,8 +81,8 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         case WrongProductID             = "購入するプランを選択してください。"
         case ProductInfoMissing         = "料金情報の取得に失敗しました。"
         case ServerBusy                 = "現在購入ができません。\nしばらくたってからお試しください。"
-//        case OtherChargeType            = "他の課金方法で課金中のため、\n追加の購入は行えません。"
-//        case AutoRenewalValid           = "現在購読中のため\n追加の購入は行えません。"
+        case OtherChargeType            = "他の課金方法で課金中のため、\n追加の購入は行えません。"
+        case AutoRenewalValid           = "現在購読中のため\n追加の購入は行えません。"
         case Purchasing                 = "Purchasing..."
         case Restoreing                 = "Restoreing..."
         case ServerSending              = "DB updating..."
@@ -232,11 +232,29 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
         do {  // parse json
             let json = try NSJSONSerialization.JSONObjectWithData(data!, options: .MutableContainers) as! NSDictionary
             if json["status"] as! String != "OK" {
-                LOG("reserve api auth NG.")
-                // TODO: reserve NG のエラーメッセージはもう少し場合分けする。akeyなしとか product_id 無効とか
-                self.purchaseFinished(false, message: Message.ServerBusy.rawValue)
-                return
+                if let reason = Int(json["reason"] as! String) {
+                    LOG("reserve api auth NG, reason:\(reason)")
+                    switch reason {
+                    case 4:
+                        self.purchaseFinished(false, message: Message.NullAkey.rawValue)
+                    case 440:
+                        self.purchaseFinished(false, message: Message.ProductInfoMissing.rawValue)
+                    case 441:
+                        self.purchaseFinished(false, message: Message.OtherChargeType.rawValue)
+                    default:
+                        self.purchaseFinished(false, message: Message.ServerBusy.rawValue)
+                    }
+                    return;
+                    
+                } else {
+                    // status は OK ではないが、reason が取得できない
+                    LOG("reserve api auth NG.")
+                    self.purchaseFinished(false, message: Message.ServerBusy.rawValue)
+                    return
+                }
             }
+            LOG("reserve OK")
+
         } catch {
             // json parse error
             LOG("json parse failed.")
@@ -396,7 +414,7 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
                 
             case .Deferred:  // 購入承認待ち(ペアレンタルコントロール)
                 LOG("Purchase Deferred, \(transaction.payment.productIdentifier), \(transaction.transactionIdentifier), \(transaction.error?.code), \(transaction.error?.localizedDescription)")
-                self.purchaseFinished(false, message: Message.PurchaseFailed.rawValue)
+                self.purchaseFinished(false, message: Message.PurchaseDeferred.rawValue)
 
 //            default:
 //                LOG("unexpected state !!!")
@@ -562,15 +580,20 @@ class TKAppStore : NSObject, SKProductsRequestDelegate, SKPaymentTransactionObse
                             SKPaymentQueue.defaultQueue().finishTransaction(transaction)
                         }
                     }
-                    self.purchaseFinished(true, message: Message.PurchaseFinished.rawValue)
-
+                    if self.validDate?.timeIntervalSinceNow > 0 {
+                        // 購入、有効期限内
+                        self.purchaseFinished(true, message: Message.PurchaseFinished.rawValue)
+                    } else {
+                        // 購入、有効期限切れ（別端末で起動した際、すでに期限切れのレシートが飛んでくることがあるため）
+                        self.purchaseFinished(false, message: Message.RestoreExpired.rawValue)
+                    }
                 } else if self.validDate?.timeIntervalSinceNow > 0 {
                     // リストア、有効期限内
                     self.purchaseFinished(true, message: Message.RestoreFinished.rawValue)
 
                 } else {
                     // リストア、有効期限切れ
-                    self.purchaseFinished(true, message: Message.RestoreExpired.rawValue)
+                    self.purchaseFinished(false, message: Message.RestoreExpired.rawValue)
                 }
                 
             } else {
